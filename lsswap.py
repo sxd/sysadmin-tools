@@ -14,10 +14,21 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import subprocess
 import sys
 import os
 import re
-import subprocess
+import getopt
+from prettytable import PrettyTable
+
+
+def usage():
+    print """This command must be run as root
+Usage:
+
+-h		Print this message
+"""
+
 
 def size_suffix(bytes):
     convertion = [
@@ -38,54 +49,107 @@ def size_suffix(bytes):
 
     return str(total) + suffix
 
-regex_pid = re.compile("\d+")
-regex_name = re.compile("^Name: .*")
 
-proc_files = os.listdir("/proc/")
-proc_pid = {}
-proc_name = {}
+def run_cmd(cmd=""):
 
-for proc_dir in proc_files:
-    if re.match(regex_pid, proc_dir) is not None:
+    if cmd is "":
+        return 1
 
-        try: 
-            if sys.version_info >= (2, 7):
-                cont = subprocess.check_output("grep Name /proc/"+proc_dir+"/status",shell=True,stderr=None)
+    if sys.version_info >= (2, 7):
+        cont = subprocess.check_output(cmd,
+                                       shell=True,
+                                       stderr=None)
+    else:
+        p = subprocess.Popen(cmd,
+                             shell=True,
+                             stderr=None,
+                             stdout=subprocess.PIPE)
+        cont = p.stdout.readline()
 
-                pid_name = cont.split()[1]
+    return cont
 
-                pid_sum = int(subprocess.check_output("grep 'Swap' /proc/"+proc_dir+"/smaps | awk 'BEGIN{sum=0}{sum+=$2}END{print sum}'",shell=True))
-            else:
-                pipe = subprocess.Popen("grep Name /proc/"+proc_dir+"/status",shell=True,stderr=None,stdout=subprocess.PIPE).stdout
-                line = pipe.readline()
-                
-                pid_name = line.split()[1]
 
-                pipe = subprocess.Popen("grep 'Swap' /proc/"+proc_dir+"/smaps | awk 'BEGIN{sum=0}{sum+=$2}END{print sum}'",shell=True,stderr=None,stdout=subprocess.PIPE).stdout
-                line = pipe.readline()
-                pid_sum = int(line)
+def get_data(by_name=True):
+    regex_pid = re.compile("\d+")
 
-        except Exception as ex:
+    proc_files = os.listdir("/proc/")
+    p_pid = {}
+    p_name = {}
+
+    for p_dir in proc_files:
+        if re.match(regex_pid, p_dir) is None:
             continue
 
-        if pid_sum > 0 :
-            proc_pid[proc_dir] = {}
-            proc_pid[proc_dir]["name"] = pid_name
-            proc_pid[proc_dir]["swap_used"] = pid_sum
-            proc_pid[proc_dir]["swap_hr"] = size_suffix(pid_sum*1024)
-            
-            if proc_name.has_key(pid_name):
-                proc_name[pid_name]["swap"] += pid_sum
+        try:
+            cont = run_cmd("grep Name /proc/" +
+                           p_dir +
+                           "/status")
+
+            proc_name = cont.split()[1]
+
+            p_sum = run_cmd("grep 'Swap' /proc/" +
+                            p_dir +
+                            "/smaps | " +
+                            "awk 'BEGIN{s=0}{s+=$2}END{print s}'")
+            p_sum = int(p_sum) * 1024
+
+        except Exception as ex:
+            print ex
+            continue
+
+        if p_sum > 0:
+            p_pid[p_dir] = {}
+            p_pid[p_dir]["name"] = p_name
+            p_pid[p_dir]["swap_used"] = p_sum
+            p_pid[p_dir]["swap_hr"] = size_suffix(p_sum)
+
+            if proc_name in p_name:
+                p_name[proc_name]["swap"] += p_sum
             else:
-                proc_name[pid_name] = {}
-                proc_name[pid_name]["swap"] = pid_sum
+                p_name[proc_name] = {}
+                p_name[proc_name]["swap"] = p_sum
 
-            proc_name[pid_name]["swap_hr"] = size_suffix(proc_name[pid_name]["swap"]*1024)
-            
+                p_name[proc_name]["swap_hr"] = size_suffix(
+                    p_name[proc_name]["swap"])
 
-for proc in proc_name:
-    print "%s %s" % (proc, proc_name[proc]["swap_hr"])
+    if by_name:
+        return p_name
+    else:
+        return p_pid
 
-#for proc in proc_pid:
-#    print "%s %s %s" % (proc_pid[proc]["name"], proc, proc_pid[proc]["swap_hr"])
 
+def print_simple(procs=None):
+
+    if procs is None:
+        return None
+
+    table = PrettyTable(["CMD", "Swap"])
+    table.align["CMD"] = "l"
+    table.align["Swap"] = "r"
+
+    for proc in procs:
+        table.add_row([
+            proc,
+            procs[proc]["swap_hr"]])
+
+    print table
+
+
+def lswap_main():
+
+    opts, args = getopt.getopt(sys.argv[1:], "h",
+                               ["help"])
+
+    by_name = True
+
+    for opt, arg in opts:
+        if opt in ("-h"):
+            sys.exit(0)
+
+    procs = get_data(by_name)
+
+    print_simple(procs)
+
+
+if __name__ == "__main__":
+    lswap_main()
