@@ -19,7 +19,12 @@ import sys
 import os
 import re
 import getopt
+import collections
 from prettytable import PrettyTable
+
+# Dev utils
+# import pprint
+# pp = pprint.PrettyPrinter(indent=4)
 
 
 def usage():
@@ -27,6 +32,7 @@ def usage():
 Usage:
 
 -h		Print this message
+--order-by	It takes one of the values: swap or name
 """
 
 
@@ -135,20 +141,43 @@ def print_simple(procs=None):
     print table
 
 
+def order_procs(procs=None, order="s"):
+    if procs is None:
+        return None
+
+    procs_o = {}
+    if order in ("s", "swap"):
+        procs_o = collections.OrderedDict(sorted(procs.items(),
+                                                 key=lambda t: t[1]['swap']))
+    elif order in ("n", "name"):
+        procs_o = collections.OrderedDict(sorted(procs.items(),
+                                                 key=lambda t: t[0]))
+
+    return procs_o
+
+
 def lswap_main():
 
     opts, args = getopt.getopt(sys.argv[1:], "h",
-                               ["help"])
+                               ["help",
+                                "h",
+                                "order-by="])
 
     by_name = True
+    order_by = "s"
 
     for opt, arg in opts:
-        if opt in ("-h"):
+        if opt in ("--h", "-h", "--help"):
+            usage()
             sys.exit(0)
+        elif opt in ("--order-by"):
+            order_by = arg
 
     procs = get_data(by_name)
 
-    print_simple(procs)
+    procs_ordered = order_procs(procs, order_by)
+
+    print_simple(procs_ordered)
 
 
 if __name__ == "__main__":
