@@ -95,7 +95,7 @@ def get_data(by_name=True):
 
             p_sum = run_cmd("grep 'Swap' /proc/" +
                             p_dir +
-                            "/smaps | " +
+                            "/smaps 2> /dev/null | " +
                             "awk 'BEGIN{s=0}{s+=$2}END{print s}'")
             p_sum = int(p_sum) * 1024
 
